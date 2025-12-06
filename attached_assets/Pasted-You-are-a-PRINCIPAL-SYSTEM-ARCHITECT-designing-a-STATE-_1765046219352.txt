@@ -1,0 +1,217 @@
+You are a PRINCIPAL SYSTEM ARCHITECT designing a STATE-OF-THE-ART Food Delivery Platform (like Swiggy/Zomato) using modern distributed systems patterns.
+
+🎯 GOAL
+Design a production-grade system architecture for an Online Food Ordering platform with ~10 microservices, using:
+- Central API Gateway
+- Microservices Architecture (not monolith, not distributed monolith)
+- Mix of REST, GraphQL, gRPC, and Event-Driven messaging
+- Integration with external SAP business units via REST
+- Strong focus on scalability, resilience, observability, and security
+
+🧩 CORE DOMAIN / MICROSERVICES (10)
+Model the platform around these services (each as an independent microservice with its own DB):
+1. Auth & Identity Service
+2. Restaurant Service
+3. Menu Service
+4. Search & Discovery Service
+5. Order Service
+6. Delivery Partner (Rider) Service
+7. Live Order Tracking Service
+8. Payment Service
+9. Offers & Coupon Service
+10. Notification Service
+
+Architect them as MICRO-SERVICES with:
+- Database per Service (polyglot persistence allowed)
+- Clear bounded contexts
+- Hexagonal / Clean Architecture per service (Ports & Adapters)
+
+🏛 ARCHITECTURAL STYLES TO USE
+Explain how the system combines or selectively uses:
+
+- Microservices Architecture (core style)
+- SOA (at enterprise level / SAP integration)
+- Event-Driven Architecture (for orders, payments, notifications)
+- Layered Architecture (within each service: API → Application → Domain → Infrastructure)
+- Hexagonal Architecture (Ports & Adapters around domain logic)
+- Clean Architecture (use cases, entities, adapters)
+- Client-Server Architecture (web / mobile clients via gateway)
+- Serverless Architecture (for async tasks like notifications / invoice generation)
+- (Optionally mention why P2P is NOT suitable here – as a contrast)
+
+🗂 DATA MANAGEMENT PATTERNS
+Use and explain where and why:
+
+- CQRS (Command Query Responsibility Segregation)
+  - Commands for writes on Orders, Payments, Deliveries
+  - Queries via read-optimized views (e.g. for tracking screen, search screen)
+- Event Sourcing (if appropriate for Order / Payment history) OR justify not using it
+- Database per Service (standard)
+- Avoid Shared Database (call it out as an anti-pattern)
+- Saga Pattern for distributed transactions:
+  - Example: Place Order → Reserve Inventory → Process Payment → Assign Rider → Confirm / Cancel
+- Materialized Views for read-heavy UIs (order tracking, restaurant list)
+- Change Data Capture (CDC) for feeding analytics / SAP / reports
+- Polyglot Persistence:
+  - e.g. Postgres for Orders/Payments, MongoDB for Menus, ElasticSearch/OpenSearch for Search
+- Data Sharding / Partitioning (e.g. by region / city for Orders & Deliveries)
+- Data Replication and Read Replicas
+- CAP Theorem discussion: what’s CP, what’s AP, where eventual consistency is acceptable
+- BASE vs ACID trade-offs and where eventual consistency is OK (e.g. offers, tracking)
+
+🛡 RESILIENCE & FAULT TOLERANCE
+Use these patterns between services:
+
+- Circuit Breaker (e.g. Order -> Payment, Order -> Restaurant)
+- Retry Pattern with exponential + jitter backoff
+- Timeout Pattern (no hanging calls)
+- Bulkhead Pattern (isolate thread pools / connection pools per dependency)
+- Fallback Pattern (e.g. degraded features, cached menus)
+- Rate Limiting & Throttling at API Gateway
+- Load Shedding & Graceful Degradation under high load
+- Fail Fast & Failover strategies
+- Health Checks (liveness, readiness, startup probes)
+- Chaos Engineering (to test resilience)
+
+🔌 COMMUNICATION PATTERNS
+Model service-to-service communication with:
+
+- Synchronous REST:
+  - e.g. API Gateway → BFF → Microservices
+  - Some internal calls (e.g. Order → Restaurant)
+- Synchronous gRPC:
+  - High-throughput low-latency internal calls (e.g. Order ↔ Delivery Partner)
+- GraphQL:
+  - At API Gateway or dedicated BFF for Mobile/Web to aggregate data:
+    - Example: Order details + tracking + restaurant + menu + offers in a single query
+- Asynchronous Messaging:
+  - Message Queue + Pub/Sub (e.g. Kafka)
+  - Topics like: `order.created`, `order.confirmed`, `payment.success`, `rider.assigned`, `notification.send`
+- Streaming & Event Log (Kafka/Kinesis) for real-time tracking & analytics
+- WebSockets or Server-Sent Events:
+  - For Live Order Tracking updates to clients
+- Fan-out / Fan-in:
+  - Example: One `order.created` event triggers updates to multiple services (Notification, Analytics, SAP integration)
+
+🚦 API DESIGN & GATEWAY
+Design an API Gateway layer that:
+
+- Handles:
+  - Authentication (JWT / OAuth2 / OIDC)
+  - Rate limiting, throttling, API keys
+  - Request routing to microservices
+  - Blue–Green/Canary routing if applicable
+- Uses:
+  - REST endpoints
+  - GraphQL endpoint for complex client views (BFF-style)
+- Patterns:
+  - API Gateway Pattern
+  - Backend-for-Frontend (BFF) for:
+    - Mobile App
+    - Web App
+    - Admin / Restaurant Dashboard
+  - Aggregator / Composition patterns
+  - Strangler Fig Pattern for gradual migration if starting from monolith
+
+🌐 EXTERNAL INTEGRATIONS (SAP & OTHERS)
+- Some microservices communicate with external SAP business units via REST:
+  - Example: Billing, Finance, Inventory, Vendor Management
+- Use:
+  - API adapters / anti-corruption layer
+  - Circuit breakers, retries, timeouts on external calls
+  - CDC / async events to sync data to SAP to avoid tight coupling
+
+🧱 CONSISTENCY & COORDINATION
+- Use:
+  - Distributed Locks (e.g. for idempotent payment handling or inventory reservation)
+  - Leader Election where needed (e.g. background schedulers)
+  - Consensus Algorithms (Raft via etcd/Consul/ZooKeeper if required for coordination)
+  - Logical / Vector Clocks or event versioning for ordering events
+  - Idempotency Keys for:
+    - Payment operations
+    - Order creation
+    - Webhook handlers
+  - Model delivery guarantees:
+    - At-least-once vs At-most-once vs Exactly-once (and realistic approach using idempotency)
+
+🔐 SECURITY PATTERNS
+Apply:
+
+- Authentication & Authorization:
+  - OAuth 2.0, OpenID Connect, JWT
+  - RBAC / ABAC (e.g. customer, restaurant owner, rider, admin)
+- API Keys (for internal services & external SAP integrations if needed)
+- mTLS between internal services
+- Zero Trust Architecture principles
+- Secrets Management (Vault, KMS, Secret Manager)
+- Validations, input sanitation, rate limiting, WAF
+
+📈 OBSERVABILITY & MONITORING
+Include:
+
+- Centralized Logging (structured logs, correlation IDs)
+- Distributed Tracing (OpenTelemetry, Jaeger, Zipkin)
+- Metrics (Prometheus style): latency, error rate, throughput, saturation
+- Dashboards & Alerting (SLIs/SLOs, SLAs)
+- Health Endpoints for each service
+- Correlation IDs flowing from gateway through all services & messaging
+
+🚀 DEPLOYMENT & INFRASTRUCTURE
+Use:
+
+- Containers & Kubernetes
+- Service Mesh (e.g. Istio/Linkerd) for:
+  - mTLS, traffic splitting, retries, circuit breaking at mesh-level
+- Sidecar Pattern (for logging, metrics, proxies)
+- Deployment patterns:
+  - Blue–Green Deployment
+  - Canary Deployment
+  - Rolling Deployment
+- Immutable Infrastructure & Infrastructure as Code (Terraform, CloudFormation, Pulumi)
+- Auto Scaling (HPA/VPA) based on CPU/QPS/lag
+- Horizontal Scaling (stateless services) vs Vertical Scaling (databases)
+- Read Replicas & Caching for scale
+
+🕊 CACHING & PERFORMANCE
+Explain:
+
+- Cache-Aside Pattern for menus, restaurants, offers
+- Write-Through / Write-Back caches where appropriate
+- CDN for static content (images, menus, restaurant logos)
+- Connection pooling to DBs and external services
+- Jitter + Backoff on retries
+
+📬 MESSAGING & QUEUE PATTERNS
+Include:
+
+- Dead Letter Queue (DLQ) for poison messages
+- Message Deduplication strategies
+- Backpressure handling
+- Competing Consumers for scalable worker services
+- Priority Queues (e.g. high priority orders / VIP customers)
+- Delayed Queue (e.g. scheduled tasks, reminder notifications)
+
+🚫 ANTI-PATTERNS (CALL OUT EXPLICITLY)
+Explain what to avoid and why:
+
+- God Service / Mega-service
+- Chatty Microservices (too many fine-grained sync calls)
+- Shared Database across services
+- Distributed Monolith
+- Tight Coupling between services
+- Over-engineering (where some patterns would be too heavy initially)
+
+📦 OUTPUT FORMAT
+1. High-level architecture description (text)
+2. List of all microservices with responsibilities and interfaces (REST/GraphQL/gRPC/messages)
+3. Communication diagram description (who talks to whom, how)
+4. Data flow for these critical flows:
+   - Place Order
+   - Payment success/failure
+   - Rider assignment & live tracking
+   - Notification pipeline
+   - SAP integration for financials
+5. Tech stack suggestions (language-agnostic but you MAY propose examples: e.g. Node/Java/Go, Kafka, Postgres, Redis, etc.)
+6. Explicit mapping of which patterns are used where (from all the categories above).
+
+Design this as if for a Fortune 500 production system with millions of users, peak loads during dinner hours, and strict SLAs.
