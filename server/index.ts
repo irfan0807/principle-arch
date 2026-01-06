@@ -1,10 +1,17 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import microservicesApi from "./microservices/api";
+import { logger, initializeServiceRegistry } from "./microservices";
+import { setupCustomAuth } from "./customAuth";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Initialize microservices registry
+initializeServiceRegistry();
 
 declare module "http" {
   interface IncomingMessage {
@@ -60,11 +67,20 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Setup authentication (must be before other routes)
+  const authRouter = setupCustomAuth(app);
+  app.use("/api/auth", authRouter);
+
+  // Mount microservices API router
+  app.use("/api", microservicesApi);
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
+    
+    logger.error("Unhandled error", { status, message, stack: err.stack });
 
     res.status(status).json({ message });
     throw err;

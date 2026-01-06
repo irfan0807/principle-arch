@@ -1,9 +1,20 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { MapPin, Clock, Star, ShieldCheck, Truck, Utensils } from "lucide-react";
+import { MapPin, Clock, Star, ShieldCheck, Truck, Utensils, LogOut } from "lucide-react";
+import { Link } from "wouter";
+import { useAuth } from "@/components/AuthProvider";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Landing() {
+  const { user, isAuthenticated, signOut } = useAuth();
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -16,9 +27,35 @@ export default function Landing() {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <a href="/api/login">
-              <Button data-testid="button-login">Sign In</Button>
-            </a>
+            {!isAuthenticated ? (
+              <Link href="/sign-in">
+                <Button data-testid="button-login">Sign In</Button>
+              </Link>
+            ) : (
+              <>
+                <Link href="/home">
+                  <Button variant="ghost">Browse</Button>
+                </Link>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={user?.profileImageUrl} alt={user?.firstName || "User"} />
+                        <AvatarFallback>
+                          {user?.firstName?.[0] || user?.email?.[0] || "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={signOut}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -36,11 +73,19 @@ export default function Landing() {
               delivered right to your door in minutes. Track your order in real-time.
             </p>
             <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <a href="/api/login">
-                <Button size="lg" className="min-w-[200px]" data-testid="button-get-started">
-                  Get Started
-                </Button>
-              </a>
+              {!isAuthenticated ? (
+                <Link href="/sign-up">
+                  <Button size="lg" className="min-w-[200px]" data-testid="button-get-started">
+                    Get Started
+                  </Button>
+                </Link>
+              ) : (
+                <Link href="/home">
+                  <Button size="lg" className="min-w-[200px]" data-testid="button-get-started">
+                    Order Now
+                  </Button>
+                </Link>
+              )}
               <Button size="lg" variant="outline" className="min-w-[200px]" data-testid="button-learn-more">
                 Learn More
               </Button>
