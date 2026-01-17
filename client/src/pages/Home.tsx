@@ -9,7 +9,8 @@ import { Search, Star, Clock, MapPin, Utensils, ShoppingCart, LogOut, Store, Bik
 import type { Restaurant } from "@shared/schema";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { useAuth } from "@/components/AuthProvider";
+import { useAppSelector, useAppDispatch } from "@/store/hooks";
+import { selectUser, signOutUser } from "@/store/slices/authSlice";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -20,7 +21,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function Home() {
-  const { user, signOut } = useAuth();
+  const user = useAppSelector(selectUser);
+  const dispatch = useAppDispatch();
   const [searchQuery, setSearchQuery] = useState("");
   
   const { data: restaurants, isLoading } = useQuery<Restaurant[]>({
@@ -98,7 +100,7 @@ export default function Home() {
                   </Link>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={signOut}>
+                <DropdownMenuItem onClick={() => dispatch(signOutUser())}>
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign out
                 </DropdownMenuItem>

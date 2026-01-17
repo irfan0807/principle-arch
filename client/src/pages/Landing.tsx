@@ -3,7 +3,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { MapPin, Clock, Star, ShieldCheck, Truck, Utensils, LogOut } from "lucide-react";
 import { Link } from "wouter";
-import { useAuth } from "@/components/AuthProvider";
+import { useAppSelector, useAppDispatch } from "@/store/hooks";
+import { selectUser, selectIsAuthenticated, signOutUser } from "@/store/slices/authSlice";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -13,7 +14,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function Landing() {
-  const { user, isAuthenticated, signOut } = useAuth();
+  const user = useAppSelector(selectUser);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const dispatch = useAppDispatch();
 
   return (
     <div className="min-h-screen bg-background">
@@ -48,7 +51,7 @@ export default function Landing() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={signOut}>
+                    <DropdownMenuItem onClick={() => dispatch(signOutUser())}>
                       <LogOut className="mr-2 h-4 w-4" />
                       Sign out
                     </DropdownMenuItem>

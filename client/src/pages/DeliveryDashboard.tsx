@@ -13,11 +13,13 @@ import { MapPin, DollarSign, Package, Star, Navigation, Phone, Utensils, LogOut,
 import type { DeliveryPartner, Order } from "@shared/schema";
 import { useState, useEffect } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { useAuth } from "@/components/AuthProvider";
+import { useAppSelector, useAppDispatch } from "@/store/hooks";
+import { selectUser, signOutUser } from "@/store/slices/authSlice";
 
 export default function DeliveryDashboard() {
   const { toast } = useToast();
-  const { user, signOut } = useAuth();
+  const user = useAppSelector(selectUser);
+  const dispatch = useAppDispatch();
   const [isOnline, setIsOnline] = useState(false);
 
   const { data: partner, isLoading: partnerLoading } = useQuery<DeliveryPartner>({
@@ -138,7 +140,7 @@ export default function DeliveryDashboard() {
               </Button>
             </Link>
             <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={signOut}>
+            <Button variant="ghost" size="sm" onClick={() => dispatch(signOutUser())}>
               <LogOut className="h-4 w-4 mr-2" />
               Sign Out
             </Button>

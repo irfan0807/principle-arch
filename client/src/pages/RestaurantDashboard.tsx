@@ -12,7 +12,8 @@ import { format } from "date-fns";
 import { Store, Clock, DollarSign, TrendingUp, Check, X, Truck, Utensils, LogOut, Home } from "lucide-react";
 import type { Restaurant, Order } from "@shared/schema";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { useAuth } from "@/components/AuthProvider";
+import { useAppSelector, useAppDispatch } from "@/store/hooks";
+import { selectUser, signOutUser } from "@/store/slices/authSlice";
 
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
@@ -26,7 +27,8 @@ const statusColors: Record<string, string> = {
 
 export default function RestaurantDashboard() {
   const { toast } = useToast();
-  const { user, signOut } = useAuth();
+  const user = useAppSelector(selectUser);
+  const dispatch = useAppDispatch();
 
   const { data: restaurants, isLoading: restaurantsLoading } = useQuery<Restaurant[]>({
     queryKey: ["/api/my-restaurants"],
@@ -108,7 +110,7 @@ export default function RestaurantDashboard() {
               </Button>
             </Link>
             <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={signOut}>
+            <Button variant="ghost" size="sm" onClick={() => dispatch(signOutUser())}>
               <LogOut className="h-4 w-4 mr-2" />
               Sign Out
             </Button>

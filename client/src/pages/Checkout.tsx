@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { useCart } from "@/lib/cart";
+import { useAppSelector, useAppDispatch } from "@/store/hooks";
+import { selectCartItems, selectRestaurantId, selectRestaurantName, selectCartTotal, updateQuantity, removeItem, clearCart } from "@/store/slices/cartSlice";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Minus, Plus, Trash2, ArrowLeft, Tag, Utensils } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -16,14 +17,16 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 export default function Checkout() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { items, restaurantId, restaurantName, updateQuantity, removeItem, clearCart, getSubtotal } = useCart();
+  const dispatch = useAppDispatch();
+  const items = useAppSelector(selectCartItems);
+  const restaurantId = useAppSelector(selectRestaurantId);
+  const restaurantName = useAppSelector(selectRestaurantName);
+  const subtotal = useAppSelector(selectCartTotal);
   
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
-
-  const subtotal = getSubtotal();
   const deliveryFee = 2.99;
   const discount = appliedCoupon?.discount || 0;
   const total = subtotal + deliveryFee - discount;
@@ -62,7 +65,7 @@ export default function Checkout() {
       return res.json();
     },
     onSuccess: (order) => {
-      clearCart();
+      dispatch(clearCart());
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({ title: "Order placed!", description: "Your order has been submitted successfully." });
       setLocation(`/orders/${order.id}`);
@@ -134,7 +137,7 @@ export default function Checkout() {
                       size="icon"
                       variant="outline"
                       className="h-8 w-8"
-                      onClick={() => updateQuantity(item.menuItem.id, item.quantity - 1)}
+                      onClick={() => dispatch(updateQuantity({ menuItemId: item.menuItem.id, quantity: item.quantity - 1 }))}
                       data-testid={`button-decrease-${item.menuItem.id}`}
                     >
                       <Minus className="h-3 w-3" />
@@ -144,7 +147,7 @@ export default function Checkout() {
                       size="icon"
                       variant="outline"
                       className="h-8 w-8"
-                      onClick={() => updateQuantity(item.menuItem.id, item.quantity + 1)}
+                      onClick={() => dispatch(updateQuantity({ menuItemId: item.menuItem.id, quantity: item.quantity + 1 }))}
                       data-testid={`button-increase-${item.menuItem.id}`}
                     >
                       <Plus className="h-3 w-3" />
@@ -153,7 +156,7 @@ export default function Checkout() {
                       size="icon"
                       variant="ghost"
                       className="h-8 w-8 text-destructive"
-                      onClick={() => removeItem(item.menuItem.id)}
+                      onClick={() => dispatch(removeItem(item.menuItem.id))}
                       data-testid={`button-remove-${item.menuItem.id}`}
                     >
                       <Trash2 className="h-3 w-3" />

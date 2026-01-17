@@ -8,13 +8,18 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Star, Clock, MapPin, Plus, Minus, ArrowLeft, ShoppingCart, Leaf, Flame } from "lucide-react";
 import type { Restaurant as RestaurantType, MenuItem, MenuCategory } from "@shared/schema";
-import { useCart } from "@/lib/cart";
+import { useAppSelector, useAppDispatch } from "@/store/hooks";
+import { selectCartItems, selectRestaurantId, selectCartItemCount, selectCartTotal, addItem, removeItem, updateQuantity } from "@/store/slices/cartSlice";
 import { useState } from "react";
 
 export default function Restaurant() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const { items, addItem, removeItem, updateQuantity, getItemCount, getSubtotal, restaurantId } = useCart();
+  const dispatch = useAppDispatch();
+  const items = useAppSelector(selectCartItems);
+  const restaurantId = useAppSelector(selectRestaurantId);
+  const itemCount = useAppSelector(selectCartItemCount);
+  const subtotal = useAppSelector(selectCartTotal);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const { data: restaurant, isLoading: restaurantLoading } = useQuery<RestaurantType>({
@@ -215,7 +220,7 @@ export default function Restaurant() {
                                     {qty === 0 ? (
                                       <Button
                                         size="sm"
-                                        onClick={() => addItem(item, restaurant.id, restaurant.name)}
+                                        onClick={() => dispatch(addItem({ menuItem: item, restaurantId: restaurant.id, restaurantName: restaurant.name }))}
                                         disabled={!item.isAvailable}
                                         data-testid={`button-add-${item.id}`}
                                       >
@@ -227,7 +232,7 @@ export default function Restaurant() {
                                           size="icon"
                                           variant="ghost"
                                           className="h-8 w-8"
-                                          onClick={() => updateQuantity(item.id, qty - 1)}
+                                          onClick={() => dispatch(updateQuantity({ menuItemId: item.id, quantity: qty - 1 }))}
                                           data-testid={`button-decrease-${item.id}`}
                                         >
                                           <Minus className="h-3 w-3" />
@@ -237,7 +242,7 @@ export default function Restaurant() {
                                           size="icon"
                                           variant="ghost"
                                           className="h-8 w-8"
-                                          onClick={() => addItem(item, restaurant.id, restaurant.name)}
+                                          onClick={() => dispatch(addItem({ menuItem: item, restaurantId: restaurant.id, restaurantName: restaurant.name }))}
                                           data-testid={`button-increase-${item.id}`}
                                         >
                                           <Plus className="h-3 w-3" />
