@@ -5,6 +5,7 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import { nanoid } from "nanoid";
+import { initializeKeycloak, getKeycloak, getSSOLoginUrl, getSSOLogoutUrl, getUserFromToken } from "./keycloak";
 
 // In-memory OTP store (use Redis in production)
 const otpStore = new Map<string, { otp: string; expiresAt: number; name?: string }>();
@@ -36,6 +37,9 @@ export function setupCustomAuth(app: any) {
 
   app.use(passport.initialize());
   app.use(passport.session());
+
+  // Initialize Keycloak
+  const keycloak = initializeKeycloak(app);
 
   // Passport serialization
   passport.serializeUser((user: any, done) => {
@@ -80,12 +84,80 @@ export function setupCustomAuth(app: any) {
 
   const router = Router();
 
-  // Get current user
-  router.get("/me", (req: Request, res: Response) => {
-    if (req.isAuthenticated() && req.user) {
+  // Get current user (support both Passport and Keycloak)
+  router.get("/me", getUserFromToken, (req: Request, res: Response) => {
+    if ((req.isAuthenticated() && req.user) || req.kauth?.grant) {
       res.json({ user: req.user });
     } else {
       res.status(401).json({ message: "Not authenticated" });
+    }
+  });
+
+  // SSO Login route
+  router.get("/sso/login", (req: Request, res: Response) => {
+    try {
+      const loginUrl = getSSOLoginUrl();
+      res.json({ loginUrl });
+    } catch (error) {
+      console.error("SSO login error:", error);
+      res.status(500).json({ message: "SSO not configured" });
+    }
+  });
+
+  // Keycloak callback route
+  router.get("/keycloak/callback", async (req: Request, res: Response) => {
+    try {
+      // Keycloak middleware handles the callback
+      // Extract user info from Keycloak token
+      if (req.kauth?.grant?.access_token) {
+        const token = req.kauth.grant.access_token;
+        const userInfo = {
+          id: `keycloak_${token.content.sub}`,
+          email: token.content.email,
+          firstName: token.content.given_name,
+          lastName: token.content.family_name,
+          profileImageUrl: token.content.picture,
+        };
+
+        // Upsert user in database
+        const user = await storage.upsertUser(userInfo);
+
+        // Store user in session for compatibility
+        req.login(user, (err) => {
+          if (err) {
+            console.error("Keycloak login error:", err);
+            return res.redirect("/sign-in?error=sso_failed");
+          }
+          res.redirect("/home");
+        });
+      } else {
+        res.redirect("/sign-in?error=sso_failed");
+      }
+    } catch (error) {
+      console.error("Keycloak callback error:", error);
+      res.redirect("/sign-in?error=sso_failed");
+    }
+  });
+
+  // SSO Logout route
+  router.get("/sso/logout", (req: Request, res: Response) => {
+    try {
+      const logoutUrl = getSSOLogoutUrl();
+      // Clear local session
+      req.logout((err) => {
+        if (err) {
+          console.error("Logout error:", err);
+        }
+        req.session.destroy((err) => {
+          if (err) {
+            console.error("Session destroy error:", err);
+          }
+          res.json({ logoutUrl });
+        });
+      });
+    } catch (error) {
+      console.error("SSO logout error:", error);
+      res.status(500).json({ message: "SSO logout failed" });
     }
   });
 
@@ -193,13 +265,20 @@ export function setupCustomAuth(app: any) {
     }
   });
 
-  // Logout
+  // Logout (handle both Passport and Keycloak)
   router.post("/logout", (req: Request, res: Response) => {
     req.logout((err) => {
       if (err) {
-        return res.status(500).json({ message: "Failed to sign out" });
+        console.error("Logout error:", err);
       }
       req.session.destroy((err) => {
+        if (err) {
+          console.error("Session destroy error:", err);
+        }
+        // If using Keycloak, also logout from Keycloak
+        if (req.kauth?.grant) {
+          req.logout();
+        }
         res.json({ message: "Signed out successfully" });
       });
     });
@@ -208,22 +287,33 @@ export function setupCustomAuth(app: any) {
   return router;
 }
 
-// Middleware to check if user is authenticated
+// Middleware to check if user is authenticated (support both Passport and Keycloak)
 export function isAuthenticated(req: Request, res: Response, next: any) {
-  if (req.isAuthenticated()) {
+  if (req.isAuthenticated() || req.kauth?.grant) {
     return next();
   }
   res.status(401).json({ message: "Authentication required" });
 }
 
-// Middleware to check user role
+// Middleware to check user role (support both Passport and Keycloak)
 export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: any) => {
-    if (!req.isAuthenticated()) {
+    if (!req.isAuthenticated() && !req.kauth?.grant) {
       return res.status(401).json({ message: "Authentication required" });
     }
-    const user = req.user as any;
-    if (!roles.includes(user.role)) {
+
+    let userRoles: string[] = [];
+
+    if (req.kauth?.grant?.access_token) {
+      // Keycloak roles
+      userRoles = req.kauth.grant.access_token.content.realm_access?.roles || [];
+    } else if (req.user) {
+      // Passport user role
+      const user = req.user as any;
+      userRoles = user.role ? [user.role] : [];
+    }
+
+    if (!roles.some(role => userRoles.includes(role))) {
       return res.status(403).json({ message: "Insufficient permissions" });
     }
     next();

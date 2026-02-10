@@ -43,6 +43,10 @@ npm run db:push
 # Seed the database with sample data
 npx tsx script/seed.ts
 
+# (Optional) Set up SSO with Keycloak
+# See SSO_SETUP.md for detailed instructions
+docker-compose -f docker-compose.keycloak.yml up -d
+
 # Start development server
 npm run dev
 ```
@@ -51,7 +55,8 @@ The application will be available at `http://localhost:5000`
 
 ## Features
 
-### For Customers
+### Core Features
+- 🔐 **Multi-Authentication**: Google OAuth, Phone OTP, and SSO (Keycloak)
 - 🔍 Browse and search restaurants by cuisine, rating, location
 - 🍽️ View restaurant menus with categories
 - 🛒 Add items to cart with quantity management

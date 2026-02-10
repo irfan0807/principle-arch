@@ -21,6 +21,28 @@ export default function SignIn() {
     window.location.href = "/api/auth/google";
   };
 
+  const handleSSOLogin = async () => {
+    try {
+      const response = await fetch("/api/auth/sso/login");
+      const data = await response.json();
+      if (data.loginUrl) {
+        window.location.href = data.loginUrl;
+      } else {
+        toast({
+          title: "SSO Error",
+          description: "SSO login is not configured",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "SSO Error",
+        description: "Failed to initiate SSO login",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSendOtp = async () => {
     if (!phoneNumber || phoneNumber.length < 10) {
       toast({
@@ -128,8 +150,14 @@ export default function SignIn() {
             <CardDescription>Sign in to your account to continue</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="google" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+            <Tabs defaultValue="sso" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="sso" className="flex items-center gap-2">
+                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 1L3 7v10a2 2 0 002 2h10a2 2 0 002-2V7l-7-6zM5 9a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1zm0 4a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clipRule="evenodd" />
+                  </svg>
+                  SSO
+                </TabsTrigger>
                 <TabsTrigger value="google" className="flex items-center gap-2">
                   <Mail className="h-4 w-4" />
                   Google
@@ -139,6 +167,27 @@ export default function SignIn() {
                   Phone
                 </TabsTrigger>
               </TabsList>
+
+              <TabsContent value="sso" className="mt-6">
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <h3 className="text-lg font-medium">Single Sign-On</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Sign in with your organization's identity provider
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleSSOLogin}
+                    className="w-full"
+                    size="lg"
+                  >
+                    <svg className="mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 1L3 7v10a2 2 0 002 2h10a2 2 0 002-2V7l-7-6zM5 9a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1zm0 4a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clipRule="evenodd" />
+                    </svg>
+                    Continue with SSO
+                  </Button>
+                </div>
+              </TabsContent>
 
               <TabsContent value="google" className="mt-6">
                 <Button
