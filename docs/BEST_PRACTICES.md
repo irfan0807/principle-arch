@@ -211,6 +211,14 @@ export abstract class BaseService {
 
 ### 2. Service Registry Pattern
 
+The **Service Registry Pattern** is a design pattern commonly used in larger-scale applications to centralize the management and lookup of service instances. Instead of having components or modules directly instantiate or import their dependencies, they request them from a central "registry" — a single place that knows how to create, store, and provide access to various services.
+
+In a microservices architecture like FoodDash, this pattern is especially useful for managing domain services such as Auth, Order, Payment, and Delivery. Rather than scattering service instantiation or tightly coupling consumers to specific implementations, you register each service once at application startup and then retrieve it wherever it's needed — typically via a singleton registry instance or dependency injection.
+
+Key benefits of this pattern include **loose coupling** (consumers don't need to know *how* a service is created, only *what interface* it provides), **testability** (you can easily swap real services with mocks in the registry during testing), and **centralized health monitoring** (the registry can iterate over all registered services to perform aggregate health checks). TypeScript enhances this pattern by enforcing strict interfaces through the `BaseService` abstraction, ensuring type safety when registering and retrieving services.
+
+The registry also enables **dynamic service discovery** — as services spin up or shut down, they register or deregister themselves, and consumers always get the latest available instance. Combined with the health check mechanism, the registry can route requests away from unhealthy services, improving overall system resilience.
+
 **Principle**: Dynamic service discovery and registration
 
 ```typescript
@@ -246,6 +254,14 @@ export class ServiceRegistry {
 ```
 
 ### 3. Saga Pattern for Distributed Transactions
+
+The **Saga Pattern** is a design pattern for managing complex, multi-step operations that span across multiple services or data sources, where you need to maintain data consistency **without** relying on traditional distributed locks or two-phase commits. Instead of one big atomic transaction, a saga breaks the operation into a sequence of smaller, independent local transactions — each with a corresponding **compensating action** (an "undo") that runs if any subsequent step fails.
+
+In a food delivery platform like FoodDash, a great example is **order placement**. This single user action actually involves multiple services: the **Order Service** creates the order, the **Payment Service** charges the customer, the **Menu/Inventory Service** confirms item availability, and the **Delivery Service** assigns a rider. If the payment fails after inventory is reserved, the saga's compensating action releases the reserved items. If rider assignment fails after payment succeeds, the saga triggers a refund *and* releases inventory — rolling back each completed step in reverse order.
+
+There are two common saga implementations. **Choreography-based sagas** rely on each service listening for events and deciding independently what to do next — for example, `ORDER_CREATED` triggers the Payment Service, `PAYMENT_SUCCESS` triggers inventory reservation, and so on. This approach is simpler and more decoupled, but can become difficult to trace and debug as the number of steps grows. **Orchestration-based sagas** use a central coordinator (the saga orchestrator) that explicitly directs the entire flow, telling each service when to act and managing failures. This is easier to reason about, test, and monitor, especially for longer or more critical workflows. FoodDash uses the orchestration approach via its `SagaOrchestrator` in `server/microservices/saga/`.
+
+A critical requirement for sagas is **idempotency** — since steps and compensations may be retried due to network failures or timeouts, every operation must be safe to execute more than once without unintended side effects. This is typically handled by including unique transaction or correlation IDs with each step. Combined with FoodDash's event bus and correlation ID middleware, sagas provide full traceability: every step, retry, and compensation is logged with a shared correlation ID, making it straightforward to audit and debug failed workflows.
 
 **Principle**: Maintain data consistency across services without distributed locks
 
@@ -514,6 +530,14 @@ export const orderRateLimiter = new RateLimiter({
 ## Data Management
 
 ### 1. Cache-Aside Pattern
+
+The **Cache-Aside Pattern** (also known as "lazy loading") is a caching strategy where the application code is responsible for managing the cache explicitly, rather than having the cache sit transparently between the app and the data source. The flow is straightforward: when you need data, you first check the cache. If it's there (a **cache hit**), you return it immediately. If it's not (a **cache miss**), you fetch it from the primary data source (e.g., the database), store it in the cache for future use, and then return it to the caller.
+
+In FoodDash, this pattern is used extensively for read-heavy data like restaurant listings, menus, and active coupons. For example, when a customer browses restaurants, the service first checks the in-memory cache via `cache.getOrSet()`. On a cache miss, it queries the PostgreSQL database, stores the result with an appropriate TTL, and returns it. Subsequent requests for the same data are served directly from memory with sub-millisecond latency, dramatically reducing database load.
+
+A key mental model is: **the cache doesn't know about the data source, and the data source doesn't know about the cache** — your application logic is the glue that coordinates between them. This differs from patterns like "read-through" caching (where the cache itself fetches from the underlying store) or "write-through" caching (where writes go to both cache and database simultaneously). Cache-aside gives you full control over what gets cached and when, which is important when different data has different freshness requirements.
+
+Key considerations include **cache invalidation** (knowing *when* to remove or refresh stale data — FoodDash uses both TTL-based expiry and explicit invalidation via `cache.invalidatePattern()`), **TTL tuning** (restaurant data uses 5-minute TTLs since it changes rarely, while active orders use 10-second TTLs since they change frequently), and the **thundering herd problem** (if a popular cache entry expires and many requests simultaneously trigger a database fetch). Solutions to the thundering herd include request coalescing and briefly serving stale data while a single refresh is in flight.
 
 **Principle**: Application manages cache population
 
@@ -855,6 +879,12 @@ app.get("/api/restaurant/orders", requireRole("restaurant_owner", "admin"), getR
 ### 1. State Management
 
 **Server State with TanStack Query:**
+
+**Server State** refers to data that originates from an external source — typically a backend API or database — as opposed to **client state**, which is data that exists only in the browser (like form inputs, UI toggles, or cart contents). The distinction matters because server state has fundamentally different characteristics: it's **asynchronous** (you have to fetch it), **shared** (multiple users or services can change it), and **potentially stale** (the data in your app might not reflect what's currently on the server). Managing all of this manually with `useEffect` and `useState` quickly becomes complex — you end up writing boilerplate for loading states, error handling, caching, refetching, deduplication, and retry logic in every component that needs remote data.
+
+TanStack Query (formerly React Query) solves this by providing a declarative API built around the `useQuery` and `useMutation` hooks. Under the hood, it implements the **cache-aside pattern** automatically — it caches API responses by their `queryKey`, serves cached data instantly on subsequent renders, deduplicates identical in-flight requests, and refetches in the background when data becomes stale. It also handles **automatic retries**, **window focus refetching**, and **garbage collection** of unused cache entries. In FoodDash, the `queryClient` is configured with `staleTime: Infinity` and `refetchOnWindowFocus: false`, giving the application full manual control over when data refreshes — this avoids unnecessary network requests and keeps the UI snappy, while still allowing explicit cache invalidation after mutations (e.g., invalidating order data after placing a new order).
+
+A key best practice is to **never mix server state and client state in the same store**. Let TanStack Query own all server-fetched data (restaurants, menus, orders, user profile) and use a lighter solution like Zustand or React Context for purely client-side state (cart contents, theme preference, UI flags). Mixing them leads to synchronization bugs where your local copy of server data drifts out of sync with what TanStack Query's cache holds.
 
 ```typescript
 // Query client configuration
@@ -1245,6 +1275,18 @@ import type { Order, User } from "@shared/schema";
 ## Performance Optimization
 
 ### 1. Database Query Optimization
+
+**Database Query Optimization** is the practice of structuring your queries, schema, and access patterns so that the database can retrieve and manipulate data as efficiently as possible — minimizing disk I/O, CPU usage, memory consumption, and response latency. In a high-traffic platform like FoodDash, where thousands of orders, menu lookups, and user queries hit the database every second, poorly optimized queries can become the single biggest bottleneck, causing slow page loads, timeouts, and cascading failures across the entire system.
+
+**What is Database Indexing?**
+
+An **index** is a separate data structure (typically a **B-tree** or **B+ tree**) that the database maintains alongside your table data, allowing it to locate rows matching a query condition without scanning every single row in the table (a "full table scan"). Think of it like a book's index: instead of reading every page to find mentions of "pagination," you look up "pagination" in the back index and jump directly to pages 42 and 187. Without an index, a query like `WHERE customerId = 'user-123'` on a table with 10 million rows requires reading all 10 million rows. With an index on `customerId`, the database traverses a tree structure and finds the matching rows in O(log n) time — potentially examining only 20-30 nodes instead of 10 million rows.
+
+**Types of indexes**: A **single-column index** (e.g., `idx_orders_customer` on `customerId`) speeds up queries filtering by that one column. A **composite index** (e.g., on `(restaurantId, status)`) speeds up queries that filter by both columns together, and also queries filtering by just the first column (leftmost prefix rule). A **unique index** enforces uniqueness while also providing lookup speed. A **partial index** (PostgreSQL) indexes only rows matching a condition — e.g., indexing only `status = 'active'` orders, making the index smaller and faster.
+
+**When to index**: Index columns that appear in `WHERE` clauses, `JOIN` conditions, `ORDER BY`, and `GROUP BY`. In FoodDash, the `orders` table has indexes on `customerId` (look up a user's orders), `restaurantId` (look up a restaurant's orders), `status` (filter by order state), and `createdAt` (sort by recency). **When NOT to index**: don't index columns on tables with very few rows (the overhead isn't worth it), columns with very low cardinality (e.g., a boolean column with only true/false — the index doesn't narrow the search much), or columns that are rarely queried. Every index also has a **write cost**: when you INSERT or UPDATE a row, every index on that table must also be updated, so over-indexing slows down writes.
+
+**Other key optimization techniques**: **Select only needed columns** — `SELECT id, status, total` is faster than `SELECT *` because it reads less data from disk and transfers less over the network. **Pagination** — always use `LIMIT`/`OFFSET` or cursor-based pagination to avoid loading unbounded result sets into memory. **Query planning** — use `EXPLAIN ANALYZE` to inspect how the database executes your query, whether it's using indexes, and where the time is spent. **Connection pooling** — reuse database connections instead of creating new ones per request (FoodDash uses Drizzle ORM's built-in pooling). **Avoid N+1 queries** — instead of querying each related record in a loop, use JOINs or batch queries to fetch all related data in one round trip.
 
 ```typescript
 // Use indexes for frequently queried columns

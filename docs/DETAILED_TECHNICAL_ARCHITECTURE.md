@@ -1278,6 +1278,14 @@ return crypto.timingSafeEqual(a, b);
 
 ### 16.1 Horizontal Scaling Readiness
 
+A stateless server is one that holds no per-request data in its own memory between requests. Every piece of information the server needs — who the user is, what their session contains, what permissions they have — is fetched from an external store on each request rather than kept in a local variable or in-process cache. In FoodDash, the API server is stateless because user sessions are persisted in PostgreSQL via `connect-pg-simple`, not stored in the Node.js process's memory. This means any instance of the server can handle any request from any user, because no single instance "owns" a particular user's session.
+
+Storing sessions in PostgreSQL rather than in-memory (e.g., `express-session`'s default `MemoryStore`) is a deliberate tradeoff. In-memory sessions are faster but pinned to the process that created them — if that process crashes or if a load balancer routes the next request to a different instance, the session is lost. PostgreSQL-backed sessions are durable: they survive process restarts, deployments, and horizontal scaling events. They're also centralized, so any server instance can look up any session, and session invalidation (e.g., force-logout) is straightforward — just delete the row.
+
+The alternative to server-side sessions is a purely JWT-based (stateless token) approach, where the session payload lives inside the token itself and is sent with every request. JWTs avoid the database lookup entirely, but they come with downsides: you can't easily revoke a token before it expires, token size grows with payload, and sensitive data must never be embedded in the token. FoodDash uses server-side sessions because it needs immediate revocation (e.g., banning a user, role changes taking effect instantly) and because the session store doubles as a source of truth for active sessions across the platform.
+
+The performance consideration with PostgreSQL sessions is that every authenticated request triggers a database read to look up the session row. For most applications this is fine — a simple indexed lookup by session ID is sub-millisecond on PostgreSQL. At very high scale, this can be mitigated by fronting the session store with Redis (as an L1 cache for sessions) or by using Redis as the session store directly. FoodDash's architecture already supports this upgrade path: the `connect-pg-simple` store can be swapped for `connect-redis` without changing any application code, because Passport.js and Express session abstract over the storage backend.
+
 | Component | Scaling Strategy |
 |-----------|-----------------|
 | **API Server** | Stateless (sessions in PostgreSQL) — add more instances behind load balancer |
